@@ -1,0 +1,14 @@
+
+.vscode/
+
+*.bin
+
+Own code/__pycache__/
+
+models/
+
+depthai-python/
+
+*.zip
+
+Sleeve/Emotion Whisperer.app/
