@@ -9,24 +9,46 @@ UDP_PORT = 50000
 
 
 # Define Status Codes
-STATUS_BUSY = -1
+STATUS_ERROR = -1
+STATUS_BUSY = -2
 
 class SleeveHandler:
+    BASE_COMMAND = "!PlayPattern"
+
+    # Intensity levels
     OFF     = 0
     SOFT    = 1
     MEDIUM  = 2
     INTENSE = 3
 
+    # Intensity decrease
+    DECREASE = ",intensityIncrease=-"
+
+    # Available patterns:
+    STROKE_SLOW = ",stroke_down_slow"
+    STROKE_FAST = ",stroke_down_fast"
+    TAP         = ",double_tap"
+
+    # Reverse direction:
+    INVERT_VERTICAL = ",invertVertical=true"
+
     # Patterns for each area
-    LEFT_TOP        = "!PlayPattern,stroke_down_slow,circumferenceCoorOffset=256,intensityIncrease=-5"
-    CENTER_TOP      = "ct"
-    RIGHT_TOP       = "rt"
-    LEFT            = "l"
-    CENTER          = "c"
-    RIGHT           = "r"
-    LEFT_BOTTOM     = "lb"
-    CENTER_BOTTOM   = "cb"
-    RIGHT_BOTTOM    = "rb"
+    # RIGHT           = ",circumferenceCoorOffset=256"
+    # H_CENTER        = ",circumferenceCoorOffset=512"
+    # LEFT            = ",circumferenceCoorOffset=768"
+    # BOTTOM          = ",verticalCoorOffset=1023"
+    # V_CENTER        = ",verticalCoorOffset=512"
+    # TOP             = ",verticalCoorOffset=0"
+
+    RIGHT           = ",verticalCoorOffset=0"
+    H_CENTER        = ",verticalCoorOffset=512"
+    LEFT            = ",verticalCoorOffset=1023"
+    BOTTOM          = ",circumferenceCoorOffset=768"
+    V_CENTER        = ",circumferenceCoorOffset=1023"
+    TOP             = ",circumferenceCoorOffset=256"
+
+    # Extra delay dependent on intensity
+    delays = {OFF: 0, SOFT:1, MEDIUM:0.5, INTENSE:0.1}
 
     # Define global variables
     def __init__(self):
@@ -51,18 +73,24 @@ class SleeveHandler:
             command += ",invertHorizontal=true"
         
         # Send pattern command
-        self.socket.sendto(bytes(command, "utf-8"), (UDP_IP, UDP_PORT))
-        response = self.socket.recvfrom(4096)[0].decode("utf-8")
+        try:
+            self.socket.sendto(bytes(command, "utf-8"), (UDP_IP, UDP_PORT))
+            response = self.socket.recvfrom(4096)[0].decode("utf-8")
 
-        # Update the busyUntil tracker
-        duration = int(response.split(",")[1]) / 1000
-        self.busyUntil = time.time() + duration + 0.05
+            # Update the busyUntil tracker
+            duration = int(response.split(",")[1]) / 1000
+            self.busyUntil = time.time() + duration + 0.05
 
-        # Print issue
-        if duration < 0:
-            print("Issue occured with command: {command}")
+            # Print issue
+            if duration < 0:
+                print("Issue occured with command: {}".format(command))
 
-        return duration, response
+            return duration, response
+        
+        # Error handling
+        except Exception as e:
+            print("Command failed: {}".format(e))
+            return STATUS_ERROR, "STATUS: ERROR!"
 
 
     # Process command files
@@ -110,7 +138,6 @@ class SleeveHandler:
             time.sleep(duration + 5)
 
 
-    def processDangers(self, danger_levels):
-        if any(l > self.SOFT for l in danger_levels):
-            # TODO: Implement pattern selection algorithm
-            self.runCommand("01")
+    def processSignal(self, command, intensity):
+        duration, _ = self.sendCommand(command, pattern=True)
+        if duration > 0: self.busyUntil += self.delays[intensity]

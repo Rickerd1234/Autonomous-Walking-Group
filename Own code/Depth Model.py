@@ -25,6 +25,14 @@ snapshot = False
 # Grid settings
 rows = 5
 columns = 8
+# Horizontal grouping
+h_left_group = [0,1,2]
+h_center_group = [3,4]
+h_right_group = [5,6,7]
+# Vertical grouping
+v_top_group = [0,1]
+v_center_group = [2]
+v_bottom_group = [3,4]
 
 # Model settings
 binsize = 250
@@ -77,12 +85,63 @@ def blockshaped(arr, nrows, ncols):
                .reshape(-1, nrows, ncols))
 
 # Function to convert measure into output signal
-def setOutputSignals(value):
+def setGridSignals(value):
     if   (value < 0 or value > SOFT_TRESHOLD): return SleeveHandler.OFF
     elif (value < INTENSE_TRESHOLD): return SleeveHandler.INTENSE
     elif (value < MEDIUM_TRESHOLD):  return SleeveHandler.MEDIUM
     else:                            return SleeveHandler.SOFT
 
+# Function to convert danger_levels into a single output command
+def getOutputSignal(danger_levels):
+    intensity = max(danger_levels)
+
+    left = h_center = right = bottom = v_center = top = False
+    for i, l in enumerate(danger_levels):
+        if l > SleeveHandler.OFF:
+            row = i // columns
+            column = i % columns
+            
+            if row in v_top_group:
+                top = True
+            elif row in v_center_group:
+                v_center = True
+            elif row in v_bottom_group:
+                bottom = True            
+            
+            if column in h_left_group:
+                left = True
+            elif column in h_center_group:
+                h_center = True
+            elif column in h_right_group:
+                right = True
+
+    base = SleeveHandler.BASE_COMMAND + SleeveHandler.TAP #+ SleeveHandler.STROKE_SLOW
+    command = base
+
+    if (left and right) or h_center:
+        command += SleeveHandler.H_CENTER
+    elif left:
+        command += SleeveHandler.LEFT
+    elif right:
+        command += SleeveHandler.RIGHT
+
+    if (top and bottom) or v_center:
+        command += SleeveHandler.V_CENTER
+    elif top:
+        command += SleeveHandler.TOP
+    elif bottom:
+        command += SleeveHandler.BOTTOM #+ SleeveHandler.INVERT_VERTICAL
+
+    if intensity == SleeveHandler.SOFT:
+        command += SleeveHandler.DECREASE + "10"
+    elif intensity == SleeveHandler.MEDIUM:
+        command += SleeveHandler.DECREASE + "5"
+    elif intensity == SleeveHandler.INTENSE:
+        command += SleeveHandler.DECREASE + "0"
+    elif intensity == SleeveHandler.OFF:
+        command = ""
+
+    return command, intensity
 
 ############################## Camera Pipelines & Settings ##############################
 
@@ -177,8 +236,10 @@ with dai.Device(pipeline, usb2Mode=USB_2_MODE) as device:
         # Process the blocks into singular danger values (per block)
         values = list(map(measure, blocks))
 
-        danger_levels = list(map(setOutputSignals, values))
-        sleeveHandler.processDangers(danger_levels)
+        danger_levels = list(map(setGridSignals, values))
+        command, intensity = getOutputSignal(danger_levels)
+        if command != "":
+            sleeveHandler.processSignal(command, intensity)
 
 
         if visualize:
