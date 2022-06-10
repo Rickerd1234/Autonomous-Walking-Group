@@ -100,24 +100,41 @@ def getOutputSignal(danger_levels, center_point):
     intensity = max(danger_levels)
 
     left = h_center = right = bottom = v_center = top = False
+    h_sum, h_count = [0 for _ in range(3)], [0 for _ in range(3)]
+    v_sum, v_count = [0 for _ in range(3)], [0 for _ in range(3)]
     for i, l in enumerate(danger_levels):
         if l > SleeveHandler.OFF:
             row = i // columns
             column = i % columns
             
             if row in v_top_group:
-                top = True
+                v_sum[0] += l
+                v_count[0] += 1
             elif row in v_center_group:
-                v_center = True
+                v_sum[1] += l
+                v_count[1] += 1
             elif row in v_bottom_group:
-                bottom = True            
+                v_sum[2] += l
+                v_count[2] += 1            
             
             if column in h_left_group:
-                left = True
+                h_sum[0] += l
+                h_count[0] += 1
             elif column in h_center_group:
-                h_center = True
+                h_sum[1] += l
+                h_count[1] += 1
             elif column in h_right_group:
-                right = True
+                h_sum[2] += l
+                h_count[2] += 1
+
+    # Get the output signal
+    convertToMeans = lambda sums, counts: [s/c if c > 0 else 0 for s,c in zip(sums, counts)]
+    h_means = convertToMeans(h_sum, h_count)
+    v_means = convertToMeans(v_sum, v_count)
+    h_max, v_max = max(h_means), max(v_means)
+    left, h_center, right = [m == h_max for m in h_means]
+    top, v_center, bottom = [m == v_max for m in v_means]
+
     # Get the output signal arrow
     end_point_x, end_point_y = center_point
 
