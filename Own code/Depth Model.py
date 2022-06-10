@@ -19,6 +19,8 @@ USB_2_MODE = True
 # Output settings
 leftHanded = False
 visualize = True
+showGrid = True
+showArrow = True
 plotting = False
 snapshot = False
 
@@ -33,6 +35,8 @@ h_right_group = [5,6,7]
 v_top_group = [0,1]
 v_center_group = [2]
 v_bottom_group = [3,4]
+# Arrow settings
+ARROW_LENGTH = 100
 
 # Model settings
 binsize = 250
@@ -92,7 +96,7 @@ def setGridSignals(value):
     else:                            return SleeveHandler.SOFT
 
 # Function to convert danger_levels into a single output command
-def getOutputSignal(danger_levels):
+def getOutputSignal(danger_levels, center_point):
     intensity = max(danger_levels)
 
     left = h_center = right = bottom = v_center = top = False
@@ -114,6 +118,8 @@ def getOutputSignal(danger_levels):
                 h_center = True
             elif column in h_right_group:
                 right = True
+    # Get the output signal arrow
+    end_point_x, end_point_y = center_point
 
     base = SleeveHandler.BASE_COMMAND + SleeveHandler.TAP #+ SleeveHandler.STROKE_SLOW
     command = base
@@ -122,15 +128,19 @@ def getOutputSignal(danger_levels):
         command += SleeveHandler.H_CENTER
     elif left:
         command += SleeveHandler.LEFT
+        end_point_x -= ARROW_LENGTH
     elif right:
         command += SleeveHandler.RIGHT
+        end_point_x += ARROW_LENGTH
 
     if (top and bottom) or v_center:
         command += SleeveHandler.V_CENTER
     elif top:
         command += SleeveHandler.TOP
+        end_point_y -= ARROW_LENGTH
     elif bottom:
         command += SleeveHandler.BOTTOM #+ SleeveHandler.INVERT_VERTICAL
+        end_point_y += ARROW_LENGTH
 
     if intensity == SleeveHandler.SOFT:
         command += SleeveHandler.DECREASE + "10"
@@ -141,7 +151,7 @@ def getOutputSignal(danger_levels):
     elif intensity == SleeveHandler.OFF:
         command = ""
 
-    return command, intensity
+    return command, intensity, (end_point_x, end_point_y)
 
 ############################## Camera Pipelines & Settings ##############################
 
@@ -197,6 +207,7 @@ axes = list(chain.from_iterable(axes))
 
 # Create the window to display depth frame
 if visualize: cv2.namedWindow("depth")
+center_point = (resolution[0] // 2, resolution[1] // 2)
 
 
 ############################## Initialize SleeveHandler ##############################
@@ -237,7 +248,8 @@ with dai.Device(pipeline, usb2Mode=USB_2_MODE) as device:
         values = list(map(measure, blocks))
 
         danger_levels = list(map(setGridSignals, values))
-        command, intensity = getOutputSignal(danger_levels)
+        command, intensity, endpoint = getOutputSignal(danger_levels, center_point)
+        
         if command != "":
             sleeveHandler.processSignal(command, intensity)
 
@@ -249,12 +261,18 @@ with dai.Device(pipeline, usb2Mode=USB_2_MODE) as device:
             depthFrameColor = cv2.applyColorMap(depthFrameColor, cv2.COLORMAP_OCEAN)
 
             # Display the grid layout and information
-            for i, (pos, size) in enumerate(grid):
-                color = colormap[danger_levels[i]]
-                cv2.putText(depthFrameColor, str(values[i]), (pos[0]+5, size[1]-5), cv2.FONT_HERSHEY_DUPLEX, 1, color)
-                cv2.rectangle(depthFrameColor, pos, size, color, cv2.FONT_HERSHEY_DUPLEX)
+            if showGrid:
+                for i, (pos, size) in enumerate(grid):
+                    color = colormap[danger_levels[i]]
+                    cv2.putText(depthFrameColor, str(values[i]), (pos[0]+5, size[1]-5), cv2.FONT_HERSHEY_DUPLEX, 1, color)
+                    cv2.rectangle(depthFrameColor, pos, size, color, cv2.FONT_HERSHEY_DUPLEX)
 
             # Display the depthframe
+            if showArrow:
+                if endpoint != center_point:
+                    cv2.arrowedLine(depthFrameColor, center_point, endpoint, colormap[intensity], 3)
+                elif command != "":
+                    cv2.circle(depthFrameColor, center_point, 10, colormap[intensity], 3)
             cv2.imshow("depth", depthFrameColor)
 
             # Wait for 'q' keypress on the depth frame window to close
