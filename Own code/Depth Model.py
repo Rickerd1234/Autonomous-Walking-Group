@@ -19,10 +19,13 @@ USB_2_MODE = True
 # Output settings
 leftHanded = False
 visualize = True
-showGrid = True
-showArrow = True
+fullScreen = False
+showGrid = False
 plotting = False
 snapshot = False
+# Arrow settings
+showArrow = True
+arrowLength = 100
 
 # Grid settings
 rows = 5
@@ -35,20 +38,18 @@ h_right_group = [5,6,7]
 v_top_group = [0,1]
 v_center_group = [2]
 v_bottom_group = [3,4]
-# Arrow settings
-ARROW_LENGTH = 100
 
 # Model settings
-binsize = 250
-SOFT_TRESHOLD       = 10
-MEDIUM_TRESHOLD     = 5
-INTENSE_TRESHOLD    = 2
+BIN_SIZE = 125
+SOFT_TRESHOLD       = 20
+MEDIUM_TRESHOLD     = 10
+INTENSE_TRESHOLD    = 6
 
 # Define the measure used by the model
 def measure(block):
     if len(block) == 0: return -1
 
-    vals, counts = np.unique(block//binsize, return_counts=True)
+    vals, counts = np.unique(block//BIN_SIZE, return_counts=True)
     return vals[np.argmax(counts)]
 
 
@@ -127,7 +128,7 @@ def getOutputSignal(danger_levels, center_point):
                 h_sum[2] += l
                 h_count[2] += 1
 
-    # Get the output signal
+    # Get the output area
     convertToMeans = lambda sums, counts: [s/c if c > 0 else 0 for s,c in zip(sums, counts)]
     h_means = convertToMeans(h_sum, h_count)
     v_means = convertToMeans(v_sum, v_count)
@@ -135,29 +136,27 @@ def getOutputSignal(danger_levels, center_point):
     left, h_center, right = [m == h_max for m in h_means]
     top, v_center, bottom = [m == v_max for m in v_means]
 
-    # Get the output signal arrow
+    # Create the output signal arrow and command
     end_point_x, end_point_y = center_point
-
-    base = SleeveHandler.BASE_COMMAND + SleeveHandler.TAP #+ SleeveHandler.STROKE_SLOW
-    command = base
+    command = SleeveHandler.BASE_COMMAND + SleeveHandler.TAP
 
     if (left and right) or h_center:
         command += SleeveHandler.H_CENTER
     elif left:
         command += SleeveHandler.LEFT
-        end_point_x -= ARROW_LENGTH
+        end_point_x -= arrowLength
     elif right:
         command += SleeveHandler.RIGHT
-        end_point_x += ARROW_LENGTH
+        end_point_x += arrowLength
 
     if (top and bottom) or v_center:
         command += SleeveHandler.V_CENTER
     elif top:
         command += SleeveHandler.TOP
-        end_point_y -= ARROW_LENGTH
+        end_point_y -= arrowLength
     elif bottom:
-        command += SleeveHandler.BOTTOM #+ SleeveHandler.INVERT_VERTICAL
-        end_point_y += ARROW_LENGTH
+        command += SleeveHandler.BOTTOM
+        end_point_y += arrowLength
 
     if intensity == SleeveHandler.SOFT:
         command += SleeveHandler.DECREASE + "10"
@@ -223,7 +222,12 @@ fig, axes = plt.subplots(nrows=rows, ncols=columns, sharey=True, sharex=True)
 axes = list(chain.from_iterable(axes))
 
 # Create the window to display depth frame
-if visualize: cv2.namedWindow("depth")
+if visualize:
+    if fullScreen:
+        cv2.namedWindow("depth", cv2.WINDOW_NORMAL)
+        cv2.setWindowProperty("depth", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    else:
+        cv2.namedWindow("depth")
 center_point = (resolution[0] // 2, resolution[1] // 2)
 
 
@@ -254,7 +258,8 @@ with dai.Device(pipeline, usb2Mode=USB_2_MODE) as device:
         if snapshot and frame_count >= 100:
             with open("stored_depthFrame.bin", "wb") as file:
                 np.save(file, depthFrame, allow_pickle=True)
-            break
+            time.sleep(1)
+            snapshot = False
 
 
         # Process the data into blocks
@@ -264,9 +269,10 @@ with dai.Device(pipeline, usb2Mode=USB_2_MODE) as device:
         # Process the blocks into singular danger values (per block)
         values = list(map(measure, blocks))
 
+        # Get output signal and arrow
         danger_levels = list(map(setGridSignals, values))
         command, intensity, endpoint = getOutputSignal(danger_levels, center_point)
-        
+
         if command != "":
             sleeveHandler.processSignal(command, intensity)
 
@@ -281,8 +287,8 @@ with dai.Device(pipeline, usb2Mode=USB_2_MODE) as device:
             if showGrid:
                 for i, (pos, size) in enumerate(grid):
                     color = colormap[danger_levels[i]]
-                    cv2.putText(depthFrameColor, str(values[i]), (pos[0]+5, size[1]-5), cv2.FONT_HERSHEY_DUPLEX, 1, color)
-                    cv2.rectangle(depthFrameColor, pos, size, color, cv2.FONT_HERSHEY_DUPLEX)
+                    cv2.putText(depthFrameColor, str(values[i]), (pos[0]+5, size[1]-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color)
+                    cv2.rectangle(depthFrameColor, pos, size, color, cv2.FONT_HERSHEY_SIMPLEX)
 
             # Display the depthframe
             if showArrow:
@@ -293,8 +299,20 @@ with dai.Device(pipeline, usb2Mode=USB_2_MODE) as device:
             cv2.imshow("depth", depthFrameColor)
 
             # Wait for 'q' keypress on the depth frame window to close
-            if cv2.waitKey(1) == ord('q'):
+            key = cv2.waitKey(1)
+            if key == ord('q'):                 # Interrupt application
                 break
+            elif key == ord('a'):               # Toggle arrow
+                showArrow = not showArrow
+            elif key == ord('g'):               # Toggle grid
+                showGrid = not showGrid
+            elif key == ord('s'):               # Save snapshot of camera data
+                snapshot = not snapshot
+            elif key == ord('p'):               # Save screenshot
+                filename = "./screenshots/screenshot-" + str(time.strftime("%d_%m_%Y-%H_%M_%S")) + ".png"
+                print("\nSaving Screenshot:\n" + filename)
+                print("Success:", cv2.imwrite(filename, depthFrameColor))
+                time.sleep(1)
 
 
         if plotting:
