@@ -19,7 +19,7 @@ USB_2_MODE = True
 # Output settings
 leftHanded = False
 visualize = True
-fullScreen = False
+fullScreen = True
 showGrid = False
 plotting = False
 snapshot = False
@@ -49,7 +49,9 @@ INTENSE_TRESHOLD    = 6
 def measure(block):
     if len(block) == 0: return -1
 
+    # Aggregate the values in bins
     vals, counts = np.unique(block//BIN_SIZE, return_counts=True)
+    # Return the value of the largest bin (containing most data)
     return vals[np.argmax(counts)]
 
 
@@ -100,38 +102,42 @@ def setGridSignals(value):
 def getOutputSignal(danger_levels, center_point):
     intensity = max(danger_levels)
 
-    left = h_center = right = bottom = v_center = top = False
+    # Aggregate the cell values into predefined regions
     h_sum, h_count = [0 for _ in range(3)], [0 for _ in range(3)]
     v_sum, v_count = [0 for _ in range(3)], [0 for _ in range(3)]
-    for i, l in enumerate(danger_levels):
-        if l > SleeveHandler.OFF:
+    for i, level in enumerate(danger_levels):
+        if level > SleeveHandler.OFF:
             row = i // columns
             column = i % columns
             
             if row in v_top_group:
-                v_sum[0] += l
+                v_sum[0] += level
                 v_count[0] += 1
             elif row in v_center_group:
-                v_sum[1] += l
+                v_sum[1] += level
                 v_count[1] += 1
             elif row in v_bottom_group:
-                v_sum[2] += l
+                v_sum[2] += level
                 v_count[2] += 1            
             
             if column in h_left_group:
-                h_sum[0] += l
+                h_sum[0] += level
                 h_count[0] += 1
             elif column in h_center_group:
-                h_sum[1] += l
+                h_sum[1] += level
                 h_count[1] += 1
             elif column in h_right_group:
-                h_sum[2] += l
+                h_sum[2] += level
                 h_count[2] += 1
 
-    # Get the output area
+    # Get the mean value of each horizontal and vertical region
     convertToMeans = lambda sums, counts: [s/c if c > 0 else 0 for s,c in zip(sums, counts)]
     h_means = convertToMeans(h_sum, h_count)
     v_means = convertToMeans(v_sum, v_count)
+    
+    # Disable all regions
+    left = h_center = right = bottom = v_center = top = False
+    # Set the horizontal and vertical region, based on the highest mean
     h_max, v_max = max(h_means), max(v_means)
     left, h_center, right = [m == h_max for m in h_means]
     top, v_center, bottom = [m == v_max for m in v_means]

@@ -68,7 +68,9 @@ class SleeveHandler:
         # Make sure the previous pattern is finished
         if (self.busyUntil > time.time()): return STATUS_BUSY, "STATUS: BUSY"
 
-        # Prepare the command for left handed use (TODO: Implement working approach of this)
+        # Prepare the command for left handed use
+        # TODO: Implement working approach of this
+        #       It seems that invertHorizontal has no effect
         if self.leftHanded and pattern:
             command += ",invertHorizontal=true"
         
@@ -137,7 +139,8 @@ class SleeveHandler:
             print("{:10s} {}".format(cmd_id, cmd_obj["description"]))
             time.sleep(duration + 5)
 
-
+    # Process signals that are sent continuously
     def processSignal(self, command, intensity):
         duration, _ = self.sendCommand(command, pattern=True)
+        # If it is executed, add the delay based on intensity
         if duration > 0: self.busyUntil += self.delays[intensity]
