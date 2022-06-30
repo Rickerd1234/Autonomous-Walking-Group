@@ -17,27 +17,27 @@ from SleeveHandler import SleeveHandler
 USB_2_MODE = True
 
 # Output settings
-leftHanded = False
-visualize = True
-fullScreen = True
-showGrid = False
-plotting = False
-snapshot = False
+LEFT_HANDED = False
+VISUALIZE_MODEL = True
+FULL_SCREEN_MODE = True
+SHOW_GRID = False
+PLOT_DATA = False
+CREATE_SNAPSHOT = False
 # Arrow settings
-showArrow = True
-arrowLength = 100
+SHOW_ARROW = True
+ARROW_LENGTH = 100
 
 # Grid settings
-rows = 5
-columns = 8
+GRID_ROWS = 5
+GRID_COLUMNS = 8
 # Horizontal grouping
-h_left_group = [0,1,2]
-h_center_group = [3,4]
-h_right_group = [5,6,7]
+H_LEFT_GROUP = [0,1,2]
+H_CENTER_GROUP = [3,4]
+H_RIGHT_GROUP = [5,6,7]
 # Vertical grouping
-v_top_group = [0,1]
-v_center_group = [2]
-v_bottom_group = [3,4]
+V_TOP_GROUP = [0,1]
+V_CENTER_GROUP = [2]
+V_BOTTOM_GROUP = [3,4]
 
 # Model settings
 BIN_SIZE = 125
@@ -107,26 +107,26 @@ def getOutputSignal(danger_levels, center_point):
     v_sum, v_count = [0 for _ in range(3)], [0 for _ in range(3)]
     for i, level in enumerate(danger_levels):
         if level > SleeveHandler.OFF:
-            row = i // columns
-            column = i % columns
+            row = i // GRID_COLUMNS
+            column = i % GRID_COLUMNS
             
-            if row in v_top_group:
+            if row in V_TOP_GROUP:
                 v_sum[0] += level
                 v_count[0] += 1
-            elif row in v_center_group:
+            elif row in V_CENTER_GROUP:
                 v_sum[1] += level
                 v_count[1] += 1
-            elif row in v_bottom_group:
+            elif row in V_BOTTOM_GROUP:
                 v_sum[2] += level
                 v_count[2] += 1            
             
-            if column in h_left_group:
+            if column in H_LEFT_GROUP:
                 h_sum[0] += level
                 h_count[0] += 1
-            elif column in h_center_group:
+            elif column in H_CENTER_GROUP:
                 h_sum[1] += level
                 h_count[1] += 1
-            elif column in h_right_group:
+            elif column in H_RIGHT_GROUP:
                 h_sum[2] += level
                 h_count[2] += 1
 
@@ -150,19 +150,19 @@ def getOutputSignal(danger_levels, center_point):
         command += SleeveHandler.H_CENTER
     elif left:
         command += SleeveHandler.LEFT
-        end_point_x -= arrowLength
+        end_point_x -= ARROW_LENGTH
     elif right:
         command += SleeveHandler.RIGHT
-        end_point_x += arrowLength
+        end_point_x += ARROW_LENGTH
 
     if (top and bottom) or v_center:
         command += SleeveHandler.V_CENTER
     elif top:
         command += SleeveHandler.TOP
-        end_point_y -= arrowLength
+        end_point_y -= ARROW_LENGTH
     elif bottom:
         command += SleeveHandler.BOTTOM
-        end_point_y += arrowLength
+        end_point_y += ARROW_LENGTH
 
     if intensity == SleeveHandler.SOFT:
         command += SleeveHandler.DECREASE + "10"
@@ -220,16 +220,16 @@ stereo.depth.link(depthOut.input)
 ############################## Setting Processing ##############################
 
 # Process the settings to create a grid
-w, h = int(resolution[0]/columns), int(resolution[1]/rows)
-grid = [((c*w, r*h), ((c+1)*w, (r+1)*h)) for r in range(rows) for c in range(columns)]
+w, h = int(resolution[0]/GRID_COLUMNS), int(resolution[1]/GRID_ROWS)
+grid = [((c*w, r*h), ((c+1)*w, (r+1)*h)) for r in range(GRID_ROWS) for c in range(GRID_COLUMNS)]
 
 # Process the settings to create subplots
-fig, axes = plt.subplots(nrows=rows, ncols=columns, sharey=True, sharex=True)
+fig, axes = plt.subplots(nrows=GRID_ROWS, ncols=GRID_COLUMNS, sharey=True, sharex=True)
 axes = list(chain.from_iterable(axes))
 
 # Create the window to display depth frame
-if visualize:
-    if fullScreen:
+if VISUALIZE_MODEL:
+    if FULL_SCREEN_MODE:
         cv2.namedWindow("depth", cv2.WINDOW_NORMAL)
         cv2.setWindowProperty("depth", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     else:
@@ -240,7 +240,7 @@ center_point = (resolution[0] // 2, resolution[1] // 2)
 ############################## Initialize SleeveHandler ##############################
 
 sleeveHandler = SleeveHandler()
-sleeveHandler.setLeftHandMode(leftHanded)
+sleeveHandler.setLeftHandMode(LEFT_HANDED)
 
 
 ############################## Running the Model ##############################
@@ -261,11 +261,11 @@ with dai.Device(pipeline, usb2Mode=USB_2_MODE) as device:
         depthFrame = np.array(depth.getFrame())
 
         # Store a snapshot of the data after 100 frames
-        if snapshot and frame_count >= 100:
+        if CREATE_SNAPSHOT and frame_count >= 100:
             with open("stored_depthFrame.bin", "wb") as file:
                 np.save(file, depthFrame, allow_pickle=True)
             time.sleep(1)
-            snapshot = False
+            CREATE_SNAPSHOT = False
 
 
         # Process the data into blocks
@@ -283,21 +283,21 @@ with dai.Device(pipeline, usb2Mode=USB_2_MODE) as device:
             sleeveHandler.processSignal(command, intensity)
 
 
-        if visualize:
+        if VISUALIZE_MODEL:
             # Process the frame to be shown
             depthFrameColor = cv2.normalize(depthFrame, None, 255, 0, cv2.NORM_INF, cv2.CV_8UC1)
             depthFrameColor = cv2.equalizeHist(depthFrameColor)
             depthFrameColor = cv2.applyColorMap(depthFrameColor, cv2.COLORMAP_OCEAN)
 
             # Display the grid layout and information
-            if showGrid:
+            if SHOW_GRID:
                 for i, (pos, size) in enumerate(grid):
                     color = colormap[danger_levels[i]]
                     cv2.putText(depthFrameColor, str(values[i]), (pos[0]+5, size[1]-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color)
                     cv2.rectangle(depthFrameColor, pos, size, color, cv2.FONT_HERSHEY_SIMPLEX)
 
             # Display the depthframe
-            if showArrow:
+            if SHOW_ARROW:
                 if endpoint != center_point:
                     cv2.arrowedLine(depthFrameColor, center_point, endpoint, colormap[intensity], 3)
                 elif command != "":
@@ -309,11 +309,11 @@ with dai.Device(pipeline, usb2Mode=USB_2_MODE) as device:
             if key == ord('q'):                 # Interrupt application
                 break
             elif key == ord('a'):               # Toggle arrow
-                showArrow = not showArrow
+                SHOW_ARROW = not SHOW_ARROW
             elif key == ord('g'):               # Toggle grid
-                showGrid = not showGrid
+                SHOW_GRID = not SHOW_GRID
             elif key == ord('s'):               # Save snapshot of camera data
-                snapshot = not snapshot
+                CREATE_SNAPSHOT = not CREATE_SNAPSHOT
             elif key == ord('p'):               # Save screenshot
                 filename = "./screenshots/screenshot-" + str(time.strftime("%d_%m_%Y-%H_%M_%S")) + ".png"
                 print("\nSaving Screenshot:\n" + filename)
@@ -321,7 +321,7 @@ with dai.Device(pipeline, usb2Mode=USB_2_MODE) as device:
                 time.sleep(1)
 
 
-        if plotting:
+        if PLOT_DATA:
             # Plot the density graph per box
             for i, block in enumerate(blocks):
                 sns.kdeplot(np.array(block), ax=axes[i])
